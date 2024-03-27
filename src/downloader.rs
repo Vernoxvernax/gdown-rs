@@ -6,36 +6,46 @@ use isahc::ResponseExt;
 use crate::{google_drive::{GoogleItem, GooglePage}, print_warning_message, web::api_get_file};
 
 impl GoogleItem {
-  fn download_content(&mut self, force: bool, md5: bool, verbose: bool) {
+  fn download_content(&mut self, force: bool, md5: bool, verbose: bool, no_download: bool) {
     if self.mimeType == "application/vnd.google-apps.folder" {
-      create_folder(self, verbose);
       if let Some(children) = &mut self.children {
         for file in children.iter_mut() {
-          file.download_content(force, md5, verbose);
+          file.download_content(force, md5, verbose, no_download);
         }
       }
     } else {
-      download_file(self, force, md5, verbose);
+      download_file(self, force, md5, verbose, no_download);
     }
   }
 }
 
-fn create_folder(folder: &GoogleItem, verbose: bool) {
-  let path_str = format!("{}/{}", folder.path.clone().unwrap(), folder.title);
+fn create_path(item: &GoogleItem, verbose: bool, no_download: bool) {
+  let path_str = if item.mimeType == "application/vnd.google-apps.folder" {
+    format!("{}/{}", item.path.clone().unwrap(), item.title)
+  } else {
+    format!("{}", item.path.clone().unwrap())
+  };
   let path: &Path = Path::new(&path_str);
   if path.exists() {
     if verbose {
       print_warning_message(format!("Folder \"{}\" already exists. No need to create it.", path.display()).as_str())
     }
+  } else if no_download {
+    print_warning_message(format!("Would create folder: \"{}\"", path.display()).as_str());
   } else if create_dir_all(path).is_ok() {
     print_warning_message(format!("Created folder \"{}\".", path.display()).as_str());
   }
 }
 
-fn download_file(file: &GoogleItem, force: bool, md5: bool, verbose: bool) {
+fn download_file(file: &GoogleItem, force: bool, md5: bool, verbose: bool, no_download: bool) {
+  create_path(file, verbose, no_download);
   let path_str = format!("{}/{}", file.path.clone().unwrap(), file.title);
   let path: &Path = Path::new(&path_str);
   if !path.exists() || force {
+    if no_download {
+      print_warning_message(format!("Would download file: \"{}\"", path.display()).as_str());
+      return;
+    }
     print_warning_message(format!("Starting downloading for file: \"{}\"", path.display()).as_str());
     thread::sleep(Duration::from_millis(250));
     let total_size = file.fileSize.clone().unwrap().parse().unwrap();
@@ -86,24 +96,26 @@ fn download_file(file: &GoogleItem, force: bool, md5: bool, verbose: bool) {
       io::copy(&mut downloaded_file, &mut hasher).unwrap();
       let hash = hasher.compute();
       if format!("{:x}", hash) != *correct_hash {
-        if force {
+        if force && !no_download {
           print_warning_message(format!("MD5 checksum for \"{}\" does NOT match. Deleting file...", path.display()).as_str());
           fs::remove_file(path).unwrap();
-          download_file(file, force, md5, verbose);
+          download_file(file, force, md5, verbose, no_download);
         } else {
           print_warning_message(format!("MD5 checksum for \"{}\" does NOT match.", path.display()).as_str());
         }
       }
+    } else {
+      print_warning_message("Can't check file-integrity. Google didn't provide an md5 hash :/");
     }
   }
 }
 
-pub fn download_folder(google_page: GooglePage, force: bool, recursive: bool, md5: bool, verbose: bool) {
+pub fn download_folder(google_page: GooglePage, force: bool, recursive: bool, md5: bool, verbose: bool, no_download: bool) {
   for mut item in google_page.items {
     if recursive {
-      item.download_content(force, md5, verbose);
+      item.download_content(force, md5, verbose, no_download);
     } else if item.mimeType != "application/vnd.google-apps.folder" {
-      download_file(&item, force, md5, verbose);
+      download_file(&item, force, md5, verbose, no_download);
     }
   }
 }

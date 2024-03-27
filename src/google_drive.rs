@@ -38,7 +38,7 @@ impl GoogleItem {
   }
 }
 
-pub fn process_folder_id(id: &str) -> Result<GooglePage, ()> {
+pub fn process_folder_id(id: &str, output_folder: &String) -> Result<GooglePage, ()> {
   let drive_html = get_drive_html(id).unwrap();
 
   // Regex to get the key
@@ -51,7 +51,7 @@ pub fn process_folder_id(id: &str) -> Result<GooglePage, ()> {
 
   // Resolve folders
   for json_item in &mut json_page.items {
-    json_item.retrieve_children(key, String::from("."));
+    json_item.retrieve_children(key, format!("./{}", output_folder));
   }
   
   Ok(json_page)
