@@ -50,6 +50,7 @@ fn main() -> ExitCode {
     )
     .arg(
       Arg::new("verbose")
+      .short('v')
       .long("verbose")
       .help("Print all warning messages.")
       .required(false)
@@ -87,27 +88,27 @@ fn main() -> ExitCode {
       let md5 = matches.get_flag("md5");
       let verbose = matches.get_flag("verbose");
       let no_download = matches.get_flag("no-download");
-      
+
       let output_folder = if let Some(output_folder_arg) = matches.get_one::<String>("output-folder") {
         output_folder_arg
       } else {
         id
       };
-      
+
       let basic_reg = Regex::new("[[a-zA-Z0-9]-_]{33}").unwrap();
       if !basic_reg.is_match(id) {
-        print_error_message("Invalid ID format. Please ensure you're using the correct format for the ID.");
+        print_error_message("Invalid ID format. Please ensure you're using the correct format [[a-zA-Z0-9]-_]{33}.");
         return ExitCode::FAILURE;
       }
-      
+
       if matches.get_flag("file-id") {
         print_warning_message(
           format!("Just do: \"\
 wget --content-disposition \'https://drive.usercontent.google.com/download?id={}&export=download&confirm=t\'\"", id).as_str());
         return ExitCode::SUCCESS; // hehe
       }
-      
-      let google_files = process_folder_id(id, output_folder).unwrap();
+
+      let google_files = process_folder_id(id, output_folder, verbose).unwrap();
 
       download_folder(google_files, force, recursive, md5, verbose, no_download);
 

@@ -1,5 +1,4 @@
 use urlencoding::encode;
-use std::{thread, time::Duration};
 use isahc::{config::Configurable, http::StatusCode, Body, ReadResponseExt, Request, RequestExt, Response};
 
 use crate::google_drive::GooglePage;
@@ -78,7 +77,6 @@ fn get_json_part(plain: String) -> String {
 }
 
 pub fn get_drive_files(id: &str, key: &str) -> Result<GooglePage, ()> {
-  thread::sleep(Duration::from_millis(500));
   let boundary: &str = "=====vc17a3rwnndj=====";
   let ct: &str = &("multipart/mixed; boundary=\"".to_owned()+boundary+"\"");
   let body = format!("--{}
