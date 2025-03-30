@@ -1,13 +1,17 @@
-use std::fmt;
 use async_trait::async_trait;
 use regex::Regex;
 use serde_derive::{Deserialize, Serialize};
+use std::fmt;
 
-use crate::{print_message, web::{get_drive_files, get_drive_html}, MessageType};
+use crate::{
+  print_message,
+  web::{get_drive_files, get_drive_html},
+  MessageType,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GooglePage {
-  pub items: Vec<GoogleItem>
+  pub items: Vec<GoogleItem>,
 }
 
 #[allow(non_snake_case)]
@@ -20,7 +24,7 @@ pub struct GoogleItem {
   pub downloadUrl: Option<String>,
   pub fileSize: Option<String>,
   pub children: Option<Vec<GoogleItem>>,
-  pub path: Option<String>
+  pub path: Option<String>,
 }
 
 #[async_trait]
@@ -33,12 +37,17 @@ impl RetrieveChildren for GoogleItem {
   async fn retrieve_children(&mut self, key: &str, path: String, verbose: bool) {
     if self.mimeType == "application/vnd.google-apps.folder" {
       if verbose {
-        print_message(MessageType::Info, "GET: JSON for files and folders in subdirectory.");
+        print_message(
+          MessageType::Info,
+          "GET: JSON for files and folders in subdirectory.",
+        );
       }
       let inner_files = get_drive_files(&self.id, key).await.unwrap();
       let mut children = Vec::new();
       for mut inner_item in inner_files.items {
-        inner_item.retrieve_children(key, format!("{}/{}", path, self.title), verbose).await;
+        inner_item
+          .retrieve_children(key, format!("{}/{}", path, self.title), verbose)
+          .await;
         children.push(inner_item);
       }
       self.children = Some(children);
@@ -62,7 +71,11 @@ impl fmt::Display for GooglePage {
   }
 }
 
-pub async fn process_folder_id(id: &str, output_folder: &String, verbose: bool) -> Result<GooglePage, ()> {
+pub async fn process_folder_id(
+  id: &str,
+  output_folder: &String,
+  verbose: bool,
+) -> Result<GooglePage, ()> {
   if verbose {
     print_message(MessageType::Info, "GET: HTML from Google Drive folder.");
   }
@@ -76,14 +89,19 @@ pub async fn process_folder_id(id: &str, output_folder: &String, verbose: bool) 
 
   // Get the actual files as json
   if verbose {
-    print_message(MessageType::Info, "GET: JSON for files and folders in the root directory.");
+    print_message(
+      MessageType::Info,
+      "GET: JSON for files and folders in the root directory.",
+    );
   }
   let mut json_page = get_drive_files(id, key).await.unwrap();
 
   // Resolve folders
   for json_item in &mut json_page.items {
-    json_item.retrieve_children(key, format!("./{}", output_folder), verbose).await;
+    json_item
+      .retrieve_children(key, format!("./{}", output_folder), verbose)
+      .await;
   }
-  
+
   Ok(json_page)
 }
