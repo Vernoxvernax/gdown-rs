@@ -1,8 +1,9 @@
 use std::fmt;
+use async_trait::async_trait;
 use regex::Regex;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::{print_warning_message, web::{get_drive_files, get_drive_html}};
+use crate::{print_message, web::{get_drive_files, get_drive_html}, MessageType};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GooglePage {
@@ -22,16 +23,22 @@ pub struct GoogleItem {
   pub path: Option<String>
 }
 
-impl GoogleItem {
-  fn retrieve_children(&mut self, key: &str, path: String, verbose: bool) {
+#[async_trait]
+pub trait RetrieveChildren {
+  async fn retrieve_children(&mut self, key: &str, path: String, verbose: bool);
+}
+
+#[async_trait]
+impl RetrieveChildren for GoogleItem {
+  async fn retrieve_children(&mut self, key: &str, path: String, verbose: bool) {
     if self.mimeType == "application/vnd.google-apps.folder" {
       if verbose {
-        print_warning_message("GET: JSON for files and folders in subdirectory.");
+        print_message(MessageType::Info, "GET: JSON for files and folders in subdirectory.");
       }
-      let inner_files = get_drive_files(&self.id, key).unwrap();
+      let inner_files = get_drive_files(&self.id, key).await.unwrap();
       let mut children = Vec::new();
       for mut inner_item in inner_files.items {
-        inner_item.retrieve_children(key, format!("{}/{}", path, self.title), verbose);
+        inner_item.retrieve_children(key, format!("{}/{}", path, self.title), verbose).await;
         children.push(inner_item);
       }
       self.children = Some(children);
@@ -55,12 +62,12 @@ impl fmt::Display for GooglePage {
   }
 }
 
-pub fn process_folder_id(id: &str, output_folder: &String, verbose: bool) -> Result<GooglePage, ()> {
+pub async fn process_folder_id(id: &str, output_folder: &String, verbose: bool) -> Result<GooglePage, ()> {
   if verbose {
-    print_warning_message("GET: HTML from Google Drive folder.");
+    print_message(MessageType::Info, "GET: HTML from Google Drive folder.");
   }
 
-  let drive_html = get_drive_html(id).unwrap();
+  let drive_html = get_drive_html(id).await.unwrap();
 
   // Regex to get the key
   let reg = Regex::new("(?:__initData.*?)(?:[a-zA-Z0-9]{39}.*?)([a-zA-Z0-9]{39})").unwrap();
@@ -69,13 +76,13 @@ pub fn process_folder_id(id: &str, output_folder: &String, verbose: bool) -> Res
 
   // Get the actual files as json
   if verbose {
-    print_warning_message("GET: JSON for files and folders in the root directory.");
+    print_message(MessageType::Info, "GET: JSON for files and folders in the root directory.");
   }
-  let mut json_page = get_drive_files(id, key).unwrap();
+  let mut json_page = get_drive_files(id, key).await.unwrap();
 
   // Resolve folders
   for json_item in &mut json_page.items {
-    json_item.retrieve_children(key, format!("./{}", output_folder), verbose);
+    json_item.retrieve_children(key, format!("./{}", output_folder), verbose).await;
   }
   
   Ok(json_page)

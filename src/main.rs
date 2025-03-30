@@ -11,7 +11,8 @@ use downloader::download_folder;
 mod google_drive;
 use google_drive::process_folder_id;
 
-fn main() -> ExitCode {
+#[tokio::main]
+async fn main() -> ExitCode {
   let matches = Command::new("gdown")
     .about("Download Google-Drive shares recursively through the command line.")
     .version(VERSION)
@@ -96,21 +97,24 @@ fn main() -> ExitCode {
       };
 
       let basic_reg = Regex::new("[[a-zA-Z0-9]-_]{33}").unwrap();
-      if !basic_reg.is_match(id) {
-        print_error_message("Invalid ID format. Please ensure you're using the correct format [[a-zA-Z0-9]-_]{33}.");
+      if !basic_reg.is_match(id) || id.contains("http") {
+        print_message(
+          MessageType::Error,
+          "Invalid ID format. Please ensure you're using the correct format: [[a-zA-Z0-9]-_]{33}.");
         return ExitCode::FAILURE;
       }
 
       if matches.get_flag("file-id") {
-        print_warning_message(
+        print_message(
+          MessageType::Error,
           format!("Just do: \"\
 wget --content-disposition \'https://drive.usercontent.google.com/download?id={}&export=download&confirm=t\'\"", id).as_str());
         return ExitCode::SUCCESS; // hehe
       }
 
-      let google_files = process_folder_id(id, output_folder, verbose).unwrap();
+      let google_files = process_folder_id(id, output_folder, verbose).await.unwrap();
 
-      download_folder(google_files, force, recursive, md5, verbose, no_download);
+      download_folder(google_files, force, recursive, md5, verbose, no_download).await;
 
       ExitCode::SUCCESS
     },
@@ -120,24 +124,22 @@ wget --content-disposition \'https://drive.usercontent.google.com/download?id={}
   }
 }
 
-fn print_error_message(message: &str) {
-  execute!(stdout(),
-    SetAttribute(Attribute::Bold),
-    SetColors(Colors::new(Color::Red, Color::Reset)),
-    Print("Error: ".to_string()),
-    ResetColor,
-    SetAttribute(Attribute::Bold),
-    Print(message.to_string()),
-    ResetColor,
-  ).unwrap();
-  println!();
+enum MessageType {
+  Warning,
+  Info,
+  Error
 }
 
-fn print_warning_message(message: &str) {
+fn print_message(message_type: MessageType, message: &str) {
+  let (prefix, foreground) = match message_type {
+    MessageType::Warning => ("Warning: ", Color::Yellow),
+    MessageType::Error => ("Error: ", Color::Red),
+    MessageType::Info => ("Info: ", Color::Blue)
+  };
   execute!(stdout(),
     SetAttribute(Attribute::Bold),
-    SetColors(Colors::new(Color::Blue, Color::Reset)),
-    Print("Warning: ".to_string()),
+    SetColors(Colors::new(foreground, Color::Reset)),
+    Print(prefix.to_string()),
     ResetColor,
     SetAttribute(Attribute::Bold),
     Print(message.to_string()),
